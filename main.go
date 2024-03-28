@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/redis/go-redis/v9"
 	"io"
+	"log"
 	"net/http"
 )
 
@@ -96,17 +97,21 @@ func UpdateRedis(leaderboardEntries []LeaderboardEntry) {
 
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     "redis-c82bfc2f:6379",
-		Password: "password", // no password set
-		DB:       0,          // use default DB
+		Password: "secret", // no password set
+		DB:       0,        // use default DB
 	})
 
 	for _, entry := range leaderboardEntries {
 		fmt.Println(entry)
-		err := rdb.Set(ctx, entry.AccountId, entry.Stats, 0).Err()
+		jsonData, jsonError := json.Marshal(entry.Stats)
+		if jsonError != nil {
+			panic(jsonError) // Handle error appropriately in production code.
+		}
+
+		err := rdb.Set(ctx, entry.AccountId, jsonData, 0).Err()
 		if err != nil {
 			panic(err)
 		}
-
 	}
 }
 
@@ -129,8 +134,6 @@ func GetLeaderboard() LeaderboardResponse {
 	}
 	defer resp.Body.Close()
 
-	println(resp.Body)
-
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		fmt.Println("Error reading response body:", err)
@@ -145,12 +148,12 @@ func GetLeaderboard() LeaderboardResponse {
 	}
 
 	// Output some information to verify that the call was successful.
-	fmt.Println("Game Mode:", leaderboardResponse.Data.Attributes.GameMode)
+	log.Println("Game Mode:", leaderboardResponse.Data.Attributes.GameMode)
 	for _, player := range leaderboardResponse.Data.Included {
-		fmt.Println("Player ID:", player.Id)
-		fmt.Println("Player Rank:", player.Attributes.Rank)
-		fmt.Println("Player Wins:", player.Attributes.Stats.Wins)
-		fmt.Println("Player Games:", player.Attributes.Stats.Games)
+		log.Println("Player ID:", player.Id)
+		log.Println("Player Rank:", player.Attributes.Rank)
+		log.Println("Player Wins:", player.Attributes.Stats.Wins)
+		log.Println("Player Games:", player.Attributes.Stats.Games)
 	}
 
 	return leaderboardResponse
@@ -170,20 +173,21 @@ func PrepareData(response LeaderboardResponse) []LeaderboardEntry {
 }
 
 func main() {
+
+	log.Println("Fetching new leaderboard data")
+	leaderboardResponse := GetLeaderboard()
+	parsedData := PrepareData(leaderboardResponse)
+	UpdateRedis(parsedData)
+
+	//leaderboard := []LeaderboardEntry{
+	//	{AccountId: "player1", Stats: LeaderStats{Rank: 6, Wins: 7, Games: 10}},
+	//	{AccountId: "player2", Stats: LeaderStats{Rank: 5, Wins: 5, Games: 10}},
+	//	{AccountId: "player3", Stats: LeaderStats{Rank: 4, Wins: 4, Games: 10}},
+	//	{AccountId: "player4", Stats: LeaderStats{Rank: 3, Wins: 3, Games: 10}},
+	//	{AccountId: "player5", Stats: LeaderStats{Rank: 2, Wins: 2, Games: 10}},
+	//	{AccountId: "player6", Stats: LeaderStats{Rank: 1, Wins: 1, Games: 10}},
+	//}
 	//
-	//leaderboardResponse := GetLeaderboard()
-	//parsedData := PrepareData(leaderboardResponse)
-	//UpdateRedis(parsedData)
-
-	leaderboard := []LeaderboardEntry{
-		{AccountId: "player1", Stats: LeaderStats{Rank: 6, Wins: 7, Games: 10}},
-		{AccountId: "player2", Stats: LeaderStats{Rank: 5, Wins: 5, Games: 10}},
-		{AccountId: "player3", Stats: LeaderStats{Rank: 4, Wins: 4, Games: 10}},
-		{AccountId: "player4", Stats: LeaderStats{Rank: 3, Wins: 3, Games: 10}},
-		{AccountId: "player5", Stats: LeaderStats{Rank: 2, Wins: 2, Games: 10}},
-		{AccountId: "player6", Stats: LeaderStats{Rank: 1, Wins: 1, Games: 10}},
-	}
-
-	UpdateRedis(leaderboard)
+	//UpdateRedis(leaderboard)
 	//UpdateRedis(parsedData)
 }
